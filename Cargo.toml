@@ -1,6 +1,7 @@
 [package]
 name = "lazystoragemanager"
 version = "0.1.0"
+authors = ["DonJordano", "Ivan Yordanov jordanov.ivan@gmail.com"]
 edition = "2024"
 
 [dependencies]
