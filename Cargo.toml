@@ -1,0 +1,9 @@
+[package]
+name = "lazystoragemanager"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crossterm = "0.26"
+ratatui = "0.20"
+sysinfo = "0.28"
