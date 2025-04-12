@@ -2,13 +2,13 @@ use ratatui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::Spans,
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Row, Table},
+    text::{Span, Spans},
+    widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph, Row, Table},
     Terminal,
 };
 use crate::{App, AppMode};
 
-/// Compute a centered rectangle for popups.
+/// Compute a centered rectangle for popup overlays.
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -38,7 +38,7 @@ pub fn draw_app<B: Backend>(
     terminal: &mut Terminal<B>,
     app: &App,
     mode: &AppMode,
-    _spinner_chars: &[&str],
+    spinner_chars: &[&str],
 ) -> Result<(), Box<dyn std::error::Error>> {
     terminal.draw(|f| {
         let size = f.size();
@@ -50,13 +50,18 @@ pub fn draw_app<B: Backend>(
         // Main area: left panel (33%) and right panel (67%).
         let main_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(33), Constraint::Percentage(67)].as_ref())
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
             .split(outer_chunks[0]);
-        // Left panel for devices.
+        // Left panel: split vertically into two parts.
+        // Top: device list; Bottom: split further into device details (70%) and progress bar (30%).
         let left_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
             .split(main_chunks[0]);
+        let details_and_gauge = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(80), Constraint::Percentage(20)].as_ref())
+            .split(left_chunks[1]);
 
         // Left panel: Device list.
         let items: Vec<ListItem> = app
@@ -100,9 +105,34 @@ pub fn draw_app<B: Backend>(
         };
         let details_paragraph = Paragraph::new(device_details)
             .block(Block::default().borders(Borders::ALL).title("Device Details"));
-        f.render_widget(details_paragraph, left_chunks[1]);
+        f.render_widget(details_paragraph, details_and_gauge[0]);
 
-        // Right panel: Show file listing if available; otherwise a placeholder.
+        // Left panel: Progress Bar gauge.
+        if !app.devices.is_empty() {
+            let device = &app.devices[app.selected];
+            let total = device.total_space as f64;
+            let free = device.available_space as f64;
+            let used = total - free;
+            let percent = if total > 0.0 {
+                (used / total * 100.0).round() as u16
+            } else {
+                0
+            };
+            let label = format!("Used: {}%", percent);
+            let gauge = Gauge::default()
+                .block(Block::default().borders(Borders::ALL).title("Usage"))
+                .gauge_style(Style::default().fg(Color::Magenta).bg(Color::Black))
+                .percent(percent)
+                .label(Span::raw(label));
+            f.render_widget(gauge, details_and_gauge[1]);
+        } else {
+            // If no devices, display a placeholder.
+            let placeholder = Paragraph::new("No device available")
+                .block(Block::default().borders(Borders::ALL).title("Usage"));
+            f.render_widget(placeholder, details_and_gauge[1]);
+        }
+
+        // Right panel.
         let right_content = if app.devices.is_empty() {
             "No storage devices detected."
         } else if app.scanning {
@@ -111,7 +141,7 @@ pub fn draw_app<B: Backend>(
             if entries.is_empty() {
                 "No files/folders found on this device."
             } else {
-                ""
+                "" // Table view below.
             }
         } else {
             "Loading files..."
@@ -141,12 +171,11 @@ pub fn draw_app<B: Backend>(
             f.render_widget(right_panel, main_chunks[1]);
         }
 
-        let legend_text = "Keys: j/k = up/down, Ctrl-l/Ctrl-h = focus left/right, r = refresh, q = quit, e = eject, s = scan";
+        let legend_text = "Keys: j/k = up/down, Ctrl-l = focus right, Ctrl-h = focus left, r = refresh, q = quit, e = eject, s = scan";
         let legend = Paragraph::new(legend_text)
             .block(Block::default().borders(Borders::ALL).title("Legend"));
         f.render_widget(legend, outer_chunks[1]);
 
-        // Popup overlays.
         match mode {
             AppMode::ConfirmEject(index) => {
                 if let Some(device) = app.devices.get(*index) {
