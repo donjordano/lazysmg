@@ -7,7 +7,6 @@ mod storage; // if needed
 use std::{
     error::Error,
     sync::mpsc,
-    thread,
     time::Duration,
 };
 use crossterm::{
@@ -18,7 +17,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use ui::draw_app;
 use event_handler::process_event;
 use platform::macos::{detect_storage_devices, StorageDevice};
-use scanner::{FileEntry, list_directory, scan_files};
+use scanner::{FileEntry, list_directory};
 
 /// Which panel is focused.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,7 +33,6 @@ pub enum AppMode {
     ConfirmEject(usize),
     Ejected(String),
     Scanning { device_index: usize, spinner_index: usize },
-    // We do not change to a separate FileBrowser mode.
 }
 
 /// Main application state.
@@ -117,7 +115,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .unwrap_or_else(|e| Err(Box::new(e) as Box<dyn Error + Send + 'static>));
             let _ = sender.send(result).await;
         });
-        //app.scanning = true;
+        app.scanning = true;
+        mode = AppMode::Scanning { device_index: app.selected, spinner_index: 0 };
     }
 
     loop {
@@ -153,7 +152,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // In Scanning mode, update spinner and attempt to receive the file listing.
         if let AppMode::Scanning { ref mut spinner_index, .. } = mode {
             *spinner_index = (*spinner_index + 1) % spinner_chars.len();
-            // Use try_recv to poll the channel.
             if let Ok(result) = scan_rx.try_recv() {
                 match result {
                     Ok(file_entries) => {

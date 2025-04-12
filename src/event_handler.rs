@@ -17,7 +17,6 @@ pub async fn process_event(
                 match key.code {
                     KeyCode::Char('l') => {
                         app.focus = PanelFocus::Right;
-                        // (Optional: could re-draw UI or re-trigger listing.)
                     }
                     KeyCode::Char('h') => {
                         app.focus = PanelFocus::Left;
@@ -96,7 +95,6 @@ pub async fn process_event(
                     AppMode::Scanning { .. } => {
                         // Ignore key events while scanning.
                     },
-                    _ => {}
                 }
             }
         }

@@ -7,7 +7,6 @@ use ratatui::{
     Terminal,
 };
 use crate::{App, AppMode};
-use crate::scanner::FileEntry;
 
 /// Compute a centered rectangle for popups.
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -64,7 +63,7 @@ pub fn draw_app<B: Backend>(
             .devices
             .iter()
             .enumerate()
-            .map(|(i, dev)| {
+            .map(|(_i, dev)| {
                 let mut text = dev.name.clone();
                 if dev.ejectable {
                     text = format!("{} ⏏", dev.name);
