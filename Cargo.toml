@@ -1,5 +1,5 @@
 [package]
-name = "lazystoragemanager"
+name = "lazysmg"
 version = "0.1.0"
 authors = ["DonJordano", "Ivan Yordanov jordanov.ivan@gmail.com"]
 edition = "2024"
