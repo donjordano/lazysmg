@@ -47,11 +47,17 @@ pub fn draw_app<B: Backend>(
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(0), Constraint::Length(3)].as_ref())
             .split(size);
-        // Main area: left panel (33%) and right panel (67%).
+        // Main area: left panel (30%) and right panel (70%).
         let main_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
             .split(outer_chunks[0]);
+            
+        // Split right panel into top (file listing) and bottom (scan progress)
+        let right_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)].as_ref())
+            .split(main_chunks[1]);
         // Left panel: split vertically into two parts.
         // Top: device list; Bottom: split further into device details (70%) and progress bar (30%).
         let left_chunks = Layout::default()
@@ -132,7 +138,7 @@ pub fn draw_app<B: Backend>(
             f.render_widget(placeholder, details_and_gauge[1]);
         }
 
-        // Right panel.
+        // Right top panel - file listing
         let right_content = if app.devices.is_empty() {
             "No storage devices detected."
         } else if app.scanning {
@@ -147,31 +153,123 @@ pub fn draw_app<B: Backend>(
             "Loading files..."
         };
 
-        if app.file_entries.is_some() && !app.scanning && !app.file_entries.as_ref().unwrap().is_empty() {
-            let rows: Vec<Row> = app.file_entries.as_ref().unwrap().iter().map(|entry| {
-                let size_str = format!("{} bytes", entry.size);
+        // Determine which files to display (regular listing or full scan results)
+        let display_full_scan = app.full_scan_results.is_some() && !app.scan_progress.in_progress;
+        
+        // Right top panel - File listing
+        if (app.file_entries.is_some() && !app.scanning && !app.file_entries.as_ref().unwrap().is_empty()) || display_full_scan {
+            let entries = if display_full_scan {
+                app.full_scan_results.as_ref().unwrap()
+            } else {
+                app.file_entries.as_ref().unwrap()
+            };
+            
+            let title = if display_full_scan {
+                "Files By Size (Descending)"
+            } else {
+                "Files & Folders"
+            };
+            
+            let rows: Vec<Row> = entries.iter().map(|entry| {
+                // Format file size in a more readable way (KB, MB, GB)
+                let size_str = if entry.size < 1024 {
+                    format!("{} B", entry.size)
+                } else if entry.size < 1024 * 1024 {
+                    format!("{:.2} KB", entry.size as f64 / 1024.0)
+                } else if entry.size < 1024 * 1024 * 1024 {
+                    format!("{:.2} MB", entry.size as f64 / (1024.0 * 1024.0))
+                } else {
+                    format!("{:.2} GB", entry.size as f64 / (1024.0 * 1024.0 * 1024.0))
+                };
+                
                 Row::new(vec![entry.name.clone(), entry.path.clone(), size_str])
             }).collect();
+            
             let table = Table::new(rows)
                 .header(
                     Row::new(vec!["Name", "Path", "File Size"])
                         .style(Style::default().fg(Color::LightBlue))
                         .bottom_margin(1),
                 )
-                .block(Block::default().borders(Borders::ALL).title("Files & Folders"))
+                .block(Block::default().borders(Borders::ALL).title(title))
                 .widths(&[
                     Constraint::Percentage(30),
                     Constraint::Percentage(50),
                     Constraint::Percentage(20),
                 ]);
-            f.render_widget(table, main_chunks[1]);
+            f.render_widget(table, right_chunks[0]);
         } else {
             let right_panel = Paragraph::new(right_content)
-                .block(Block::default().borders(Borders::ALL).title("Right Panel"));
-            f.render_widget(right_panel, main_chunks[1]);
+                .block(Block::default().borders(Borders::ALL).title("Files & Folders"));
+            f.render_widget(right_panel, right_chunks[0]);
+        }
+        
+        // Right bottom panel - Scan progress
+        if app.scan_progress.in_progress || matches!(mode, AppMode::FullScan { .. }) {
+            // Full scan in progress - show detailed progress
+            let progress_percent = if app.scan_progress.total_bytes > 0 {
+                (app.scan_progress.scanned_bytes as f64 / app.scan_progress.total_bytes as f64 * 100.0) as u16
+            } else {
+                0
+            };
+            
+            // Format sizes in a readable way
+            let scanned_str = if app.scan_progress.scanned_bytes < 1024 * 1024 {
+                format!("{:.2} KB", app.scan_progress.scanned_bytes as f64 / 1024.0)
+            } else if app.scan_progress.scanned_bytes < 1024 * 1024 * 1024 {
+                format!("{:.2} MB", app.scan_progress.scanned_bytes as f64 / (1024.0 * 1024.0))
+            } else {
+                format!("{:.2} GB", app.scan_progress.scanned_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+            };
+            
+            let total_str = if app.scan_progress.total_bytes < 1024 * 1024 {
+                format!("{:.2} KB", app.scan_progress.total_bytes as f64 / 1024.0)
+            } else if app.scan_progress.total_bytes < 1024 * 1024 * 1024 {
+                format!("{:.2} MB", app.scan_progress.total_bytes as f64 / (1024.0 * 1024.0))
+            } else {
+                format!("{:.2} GB", app.scan_progress.total_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+            };
+            
+            // Progress bar
+            let label = format!("Scanned: {} / {} ({}%)", scanned_str, total_str, progress_percent);
+            let gauge = Gauge::default()
+                .block(Block::default().borders(Borders::ALL).title("Full Scan Progress"))
+                .gauge_style(Style::default().fg(Color::Cyan).bg(Color::Black))
+                .percent(progress_percent)
+                .label(Span::raw(label));
+                
+            let scan_stats = format!(
+                "Files processed: {}\nPress 'q' to quit or 'c' to cancel scan",
+                app.scan_progress.files_processed
+            );
+            
+            // Create a vertical layout for the gauge and stats text
+            let progress_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                .split(right_chunks[1]);
+                
+            f.render_widget(gauge, progress_chunks[0]);
+            
+            let stats_paragraph = Paragraph::new(scan_stats)
+                .block(Block::default().borders(Borders::ALL).title("Scan Statistics"));
+            f.render_widget(stats_paragraph, progress_chunks[1]);
+        } else if let AppMode::FullScan { spinner_index, .. } = mode {
+            // Full scan is initializing
+            let spinner = spinner_chars[*spinner_index];
+            let text = format!("{} Preparing full scan...", spinner);
+            let paragraph = Paragraph::new(text)
+                .block(Block::default().borders(Borders::ALL).title("Full Scan"));
+            f.render_widget(paragraph, right_chunks[1]);
+        } else {
+            // No full scan in progress, show instructions
+            let help_text = "Press 'S' to perform a full device scan and sort files by size";
+            let paragraph = Paragraph::new(help_text)
+                .block(Block::default().borders(Borders::ALL).title("Full Scan"));
+            f.render_widget(paragraph, right_chunks[1]);
         }
 
-        let legend_text = "Keys: j/k = up/down, Ctrl-l = focus right, Ctrl-h = focus left, r = refresh, q = quit, e = eject, s = scan";
+        let legend_text = "Keys: j/k = up/down, Ctrl-l = focus right, Ctrl-h = focus left, r = refresh, q = quit, e = eject, s = scan, S = full scan";
         let legend = Paragraph::new(legend_text)
             .block(Block::default().borders(Borders::ALL).title("Legend"));
         f.render_widget(legend, outer_chunks[1]);
