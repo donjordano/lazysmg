@@ -170,7 +170,7 @@ pub fn draw_app<B: Backend>(
                 "Files & Folders"
             };
             
-            let rows: Vec<Row> = entries.iter().map(|entry| {
+            let rows: Vec<Row> = entries.iter().enumerate().map(|(idx, entry)| {
                 // Format file size in a more readable way (KB, MB, GB)
                 let size_str = if entry.size < 1024 {
                     format!("{} B", entry.size)
@@ -182,7 +182,18 @@ pub fn draw_app<B: Backend>(
                     format!("{:.2} GB", entry.size as f64 / (1024.0 * 1024.0 * 1024.0))
                 };
                 
-                Row::new(vec![entry.name.clone(), entry.path.clone(), size_str])
+                // Highlight the selected file
+                let style = if idx == app.selected_file_index && app.focus == crate::PanelFocus::Right {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                
+                Row::new(vec![
+                    Span::styled(entry.name.clone(), style),
+                    Span::styled(entry.path.clone(), style),
+                    Span::styled(size_str, style)
+                ])
             }).collect();
             
             let table = Table::new(rows)
@@ -269,7 +280,16 @@ pub fn draw_app<B: Backend>(
             f.render_widget(paragraph, right_chunks[1]);
         }
 
-        let legend_text = "Keys: j/k = up/down, Ctrl-l = focus right, Ctrl-h = focus left, r = refresh, q = quit, e = eject, s = scan, S = full scan";
+        let file_op_keys = if app.focus == crate::PanelFocus::Right && (app.file_entries.is_some() || app.full_scan_results.is_some()) {
+            "File operations: Up/Down = navigate, d = delete, c = copy, m = move"
+        } else {
+            ""
+        };
+        
+        let legend_text = format!(
+            "Keys: j/k = up/down, Ctrl-l/Ctrl-h = switch panels, r = refresh, q = quit, e = eject, s = scan, S = full scan\n{}",
+            file_op_keys
+        );
         let legend = Paragraph::new(legend_text)
             .block(Block::default().borders(Borders::ALL).title("Legend"));
         f.render_widget(legend, outer_chunks[1]);
@@ -299,6 +319,52 @@ pub fn draw_app<B: Backend>(
                     .style(Style::default().fg(Color::White).bg(Color::Black));
                 let paragraph = Paragraph::new(text).block(block);
                 f.render_widget(paragraph, popup_area);
+            },
+            AppMode::ConfirmFileOp { op_type, file_index: _, target_path } => {
+                if let Some(file) = app.get_selected_file_entry() {
+                    let popup_area = centered_rect(70, 30, size);
+                    
+                    let (title, message) = match op_type {
+                        crate::FileOperation::Copy => {
+                            // Fix temporary value issue by creating a longer-lived default string
+                            let default_dest = "destination".to_string();
+                            let target = target_path.as_ref().unwrap_or(&default_dest);
+                            (
+                                "Confirm Copy",
+                                format!(
+                                    "Are you sure you want to copy this file?\n\nSource: {}\nDestination: {}\n\nPress Y to confirm, N to cancel.",
+                                    file.path, target
+                                )
+                            )
+                        },
+                        crate::FileOperation::Move => {
+                            // Fix temporary value issue by creating a longer-lived default string
+                            let default_dest = "destination".to_string();
+                            let target = target_path.as_ref().unwrap_or(&default_dest);
+                            (
+                                "Confirm Move",
+                                format!(
+                                    "Are you sure you want to move this file?\n\nSource: {}\nDestination: {}\n\nPress Y to confirm, N to cancel.",
+                                    file.path, target
+                                )
+                            )
+                        },
+                        crate::FileOperation::Delete => (
+                            "Confirm Delete",
+                            format!(
+                                "Are you sure you want to delete this file?\n\nFile: {}\n\nThis action cannot be undone!\n\nPress Y to confirm, N to cancel.",
+                                file.path
+                            )
+                        ),
+                    };
+                    
+                    let block = Block::default()
+                        .borders(Borders::ALL)
+                        .title(title)
+                        .style(Style::default().fg(Color::White).bg(Color::Black));
+                    let paragraph = Paragraph::new(message).block(block);
+                    f.render_widget(paragraph, popup_area);
+                }
             },
             _ => {}
         }

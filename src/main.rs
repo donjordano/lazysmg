@@ -34,6 +34,18 @@ pub enum AppMode {
     Ejected(String),
     Scanning { device_index: usize, spinner_index: usize },
     FullScan { device_index: usize, spinner_index: usize },
+    ConfirmFileOp { 
+        op_type: FileOperation, 
+        file_index: usize,
+        target_path: Option<String> // For copy/move operations
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum FileOperation {
+    Copy,
+    Move,
+    Delete,
 }
 
 /// Tracks progress during a full storage scan
@@ -55,6 +67,8 @@ pub struct App {
     pub focus: PanelFocus,
     pub full_scan_results: Option<Vec<FileEntry>>, // results from a full device scan
     pub scan_progress: ScanProgress,               // tracks progress during full scan
+    pub selected_file_index: usize,                // currently selected file in the list
+    pub clipboard: Option<(String, FileOperation)>, // stores path and operation type for copy/move
 }
 
 impl App {
@@ -72,6 +86,8 @@ impl App {
                 files_processed: 0,
                 in_progress: false,
             },
+            selected_file_index: 0,
+            clipboard: None,
         }
     }
 
@@ -98,6 +114,96 @@ impl App {
         } else if self.selected >= self.devices.len() {
             self.selected = self.devices.len() - 1;
         }
+    }
+    
+    pub fn next_file(&mut self) {
+        let max_index = if let Some(ref entries) = self.full_scan_results {
+            entries.len().saturating_sub(1)
+        } else if let Some(ref entries) = self.file_entries {
+            entries.len().saturating_sub(1)
+        } else {
+            0
+        };
+        
+        if max_index > 0 {
+            self.selected_file_index = (self.selected_file_index + 1).min(max_index);
+        }
+    }
+    
+    pub fn previous_file(&mut self) {
+        if self.selected_file_index > 0 {
+            self.selected_file_index -= 1;
+        }
+    }
+    
+    pub fn get_selected_file_entry(&self) -> Option<&FileEntry> {
+        if let Some(ref entries) = self.full_scan_results {
+            if self.selected_file_index < entries.len() {
+                return Some(&entries[self.selected_file_index]);
+            }
+        } else if let Some(ref entries) = self.file_entries {
+            if self.selected_file_index < entries.len() {
+                return Some(&entries[self.selected_file_index]);
+            }
+        }
+        None
+    }
+}
+
+/// Performs file operations
+pub fn perform_file_operation(
+    op_type: &FileOperation, 
+    source_path: &str, 
+    target_path: Option<&str>
+) -> Result<String, Box<dyn std::error::Error>> {
+    use std::fs;
+    use std::path::Path;
+    
+    match op_type {
+        FileOperation::Copy => {
+            if let Some(target) = target_path {
+                let source_path = Path::new(source_path);
+                let target_path = Path::new(target);
+                
+                // Create parent directory if it doesn't exist
+                if let Some(parent) = target_path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                
+                // Perform the copy
+                fs::copy(source_path, target_path)?;
+                Ok(format!("Copied {} to {}", source_path.display(), target_path.display()))
+            } else {
+                Err("Target path not provided for copy operation".into())
+            }
+        },
+        FileOperation::Move => {
+            if let Some(target) = target_path {
+                let source_path = Path::new(source_path);
+                let target_path = Path::new(target);
+                
+                // Create parent directory if it doesn't exist
+                if let Some(parent) = target_path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                
+                // Perform the move
+                fs::rename(source_path, target_path)?;
+                Ok(format!("Moved {} to {}", source_path.display(), target_path.display()))
+            } else {
+                Err("Target path not provided for move operation".into())
+            }
+        },
+        FileOperation::Delete => {
+            let path = Path::new(source_path);
+            if path.is_dir() {
+                fs::remove_dir_all(path)?;
+                Ok(format!("Deleted directory: {}", path.display()))
+            } else {
+                fs::remove_file(path)?;
+                Ok(format!("Deleted file: {}", path.display()))
+            }
+        },
     }
 }
 
