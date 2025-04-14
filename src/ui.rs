@@ -194,10 +194,10 @@ pub fn draw_app<B: Backend>(
 
             // Add up/down scroll indicators with more visible characters
             if app.file_list_offset > 0 {
-                title = format!("▲▲▲ {} ▲▲▲", title);
+                title = format!("↟ {} ", title);
             }
             if app.file_list_offset + 20 < entries.len() {
-                title = format!("{} ▼▼▼", title);
+                title = format!("{} ↡", title);
             }
 
             let rows: Vec<Row> = visible_entries.iter().map(|(idx, entry)| {
