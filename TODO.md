@@ -1,0 +1,4 @@
+  - [ ] Adding file type detection and filtering options
+  - [ ] Creating a file operations menu (copy, move, delete)
+  - [ ] Implementing disk health monitoring for storage devices
+  - [ ] Adding benchmarking for disk speed testing
