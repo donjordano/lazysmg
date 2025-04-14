@@ -69,6 +69,9 @@ pub struct App {
     pub scan_progress: ScanProgress,               // tracks progress during full scan
     pub selected_file_index: usize,                // currently selected file in the list
     pub clipboard: Option<(String, FileOperation)>, // stores path and operation type for copy/move
+    pub file_list_offset: usize,                   // scrolling offset for file list
+    pub device_results: std::collections::HashMap<String, Vec<FileEntry>>, // results per device
+    pub show_help: bool,                          // whether to show the help overlay
 }
 
 impl App {
@@ -88,6 +91,9 @@ impl App {
             },
             selected_file_index: 0,
             clipboard: None,
+            file_list_offset: 0,
+            device_results: std::collections::HashMap::new(),
+            show_help: false,
         }
     }
 
@@ -125,14 +131,25 @@ impl App {
             0
         };
         
-        if max_index > 0 {
-            self.selected_file_index = (self.selected_file_index + 1).min(max_index);
+        if max_index > 0 && self.selected_file_index < max_index {
+            self.selected_file_index += 1;
+            
+            // Adjust scroll offset if needed (maintain visibility)
+            // Assuming we show ~15 items at once
+            if self.selected_file_index >= self.file_list_offset + 14 {
+                self.file_list_offset = self.selected_file_index - 14;
+            }
         }
     }
     
     pub fn previous_file(&mut self) {
         if self.selected_file_index > 0 {
             self.selected_file_index -= 1;
+            
+            // Adjust scroll offset if needed (maintain visibility)
+            if self.selected_file_index < self.file_list_offset {
+                self.file_list_offset = self.selected_file_index;
+            }
         }
     }
     
@@ -302,19 +319,39 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // When in Normal mode, check if the selection changed.
         if let AppMode::Normal = mode {
             if !app.devices.is_empty() && app.selected != last_selected {
-                // A new device was selected; trigger an async directory listing.
-                app.scanning = true;
-                let mount = app.devices[app.selected].mount_point.clone();
-                let sender = scan_tx.clone();
-                tokio::spawn(async move {
-                    let result = tokio::task::spawn_blocking(move || list_directory(&mount))
-                        .await
-                        .unwrap_or_else(|e| Err(Box::new(e) as Box<dyn Error + Send + 'static>));
-                    let _ = sender.send(result).await;
-                });
+                // A new device was selected
+                app.selected_file_index = 0;   // Reset selection
+                app.file_list_offset = 0;      // Reset scroll
+                
+                // We only need to trigger a new scan if we don't already have results for this device
+                let device_id = &app.devices[app.selected].name;
+                let needs_scan = !app.device_results.contains_key(device_id);
+                
+                if needs_scan {
+                    // Trigger an async directory listing
+                    app.scanning = true;
+                    app.file_entries = None;
+                    
+                    let mount = app.devices[app.selected].mount_point.clone();
+                    let sender = scan_tx.clone();
+                    tokio::spawn(async move {
+                        let result = tokio::task::spawn_blocking(move || list_directory(&mount))
+                            .await
+                            .unwrap_or_else(|e| Err(Box::new(e) as Box<dyn Error + Send + 'static>));
+                        let _ = sender.send(result).await;
+                    });
+                    
+                    // Update mode to scanning
+                    mode = AppMode::Scanning { device_index: app.selected, spinner_index: 0 };
+                } else {
+                    // Show cached results
+                    if let Some(entries) = app.device_results.get(device_id) {
+                        app.file_entries = Some(entries.clone());
+                    }
+                }
+                
                 // Update last_selected.
                 last_selected = app.selected;
-                mode = AppMode::Scanning { device_index: app.selected, spinner_index: 0 };
             }
         }
 
@@ -324,6 +361,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             if let Ok(result) = scan_rx.try_recv() {
                 match result {
                     Ok(file_entries) => {
+                        // Store in device cache if we have a device selected
+                        if !app.devices.is_empty() {
+                            let device_id = app.devices[app.selected].name.clone();
+                            app.device_results.insert(device_id, file_entries.clone());
+                        }
+                        
                         app.file_entries = Some(file_entries);
                         app.scanning = false;
                         mode = AppMode::Normal;
@@ -348,7 +391,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         app.scan_progress.files_processed += 1;
                     },
                     scanner::ScanProgressMessage::ScanComplete { results } => {
-                        app.full_scan_results = Some(results);
+                        // Store full scan results in both places
+                        app.full_scan_results = Some(results.clone());
+                        
+                        // Also store in device cache if device is available
+                        if !app.devices.is_empty() {
+                            let device_id = app.devices[app.selected].name.clone();
+                            app.device_results.insert(device_id, results);
+                        }
+                        
                         app.scan_progress.in_progress = false;
                         mode = AppMode::Normal;
                     }

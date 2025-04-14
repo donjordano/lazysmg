@@ -14,6 +14,16 @@ pub async fn process_event(
 ) -> Result<bool, Box<dyn Error>> {
     if event::poll(Duration::from_millis(200))? {
         if let Event::Key(key) = event::read()? {
+            // Global key handlers
+            match key.code {
+                // Toggle help screen
+                KeyCode::Char('?') => {
+                    app.show_help = !app.show_help;
+                    return Ok(false);
+                },
+                _ => {}
+            }
+            
             // Handle panel switching with Ctrl-l and Ctrl-h.
             if key.modifiers.contains(KeyModifiers::CONTROL) {
                 match key.code {

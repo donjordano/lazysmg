@@ -82,8 +82,19 @@ pub fn draw_app<B: Backend>(
                 ListItem::new(Spans::from(text))
             })
             .collect();
+            
+        // Set different block style based on focus
+        let devices_block_style = if app.focus == crate::PanelFocus::Left {
+            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        
         let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("Devices"))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title("Devices")
+                .border_style(devices_block_style))
             .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
             .highlight_symbol(">> ");
         let mut list_state = ListState::default();
@@ -170,7 +181,26 @@ pub fn draw_app<B: Backend>(
                 "Files & Folders"
             };
             
-            let rows: Vec<Row> = entries.iter().enumerate().map(|(idx, entry)| {
+            // Apply scrolling by showing a window of entries
+            let visible_entries: Vec<(usize, &crate::scanner::FileEntry)> = entries.iter()
+                .enumerate()
+                .skip(app.file_list_offset)
+                .take(20) // Show ~20 entries at a time
+                .collect();
+            
+            // Show scroll indicators and count in the title
+            let mut title = title.to_string();
+            title = format!("{} [{}/{}]", title, app.selected_file_index + 1, entries.len());
+            
+            // Add up/down scroll indicators
+            if app.file_list_offset > 0 {
+                title = format!("↑ {} ↑", title);
+            }
+            if app.file_list_offset + 20 < entries.len() {
+                title = format!("{} ↓", title);
+            }
+            
+            let rows: Vec<Row> = visible_entries.iter().map(|(idx, entry)| {
                 // Format file size in a more readable way (KB, MB, GB)
                 let size_str = if entry.size < 1024 {
                     format!("{} B", entry.size)
@@ -183,7 +213,7 @@ pub fn draw_app<B: Backend>(
                 };
                 
                 // Highlight the selected file
-                let style = if idx == app.selected_file_index && app.focus == crate::PanelFocus::Right {
+                let style = if *idx == app.selected_file_index && app.focus == crate::PanelFocus::Right {
                     Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
@@ -196,13 +226,23 @@ pub fn draw_app<B: Backend>(
                 ])
             }).collect();
             
+            // Set different block style based on focus
+            let right_block_style = if app.focus == crate::PanelFocus::Right {
+                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            
             let table = Table::new(rows)
                 .header(
                     Row::new(vec!["Name", "Path", "File Size"])
                         .style(Style::default().fg(Color::LightBlue))
                         .bottom_margin(1),
                 )
-                .block(Block::default().borders(Borders::ALL).title(title))
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .border_style(right_block_style))
                 .widths(&[
                     Constraint::Percentage(30),
                     Constraint::Percentage(50),
@@ -210,12 +250,22 @@ pub fn draw_app<B: Backend>(
                 ]);
             f.render_widget(table, right_chunks[0]);
         } else {
+            // Set different block style based on focus
+            let right_block_style = if app.focus == crate::PanelFocus::Right {
+                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            
             let right_panel = Paragraph::new(right_content)
-                .block(Block::default().borders(Borders::ALL).title("Files & Folders"));
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .title("Files & Folders")
+                    .border_style(right_block_style));
             f.render_widget(right_panel, right_chunks[0]);
         }
         
-        // Right bottom panel - Scan progress
+        // Right bottom panel - Only show scan progress when in scan mode
         if app.scan_progress.in_progress || matches!(mode, AppMode::FullScan { .. }) {
             // Full scan in progress - show detailed progress
             let progress_percent = if app.scan_progress.total_bytes > 0 {
@@ -272,13 +322,14 @@ pub fn draw_app<B: Backend>(
             let paragraph = Paragraph::new(text)
                 .block(Block::default().borders(Borders::ALL).title("Full Scan"));
             f.render_widget(paragraph, right_chunks[1]);
-        } else {
-            // No full scan in progress, show instructions
-            let help_text = "Press 'S' to perform a full device scan and sort files by size";
+        } else if app.focus == crate::PanelFocus::Right && (app.file_entries.is_some() || app.full_scan_results.is_some()) {
+            // Show file operations help when files are displayed and right panel is focused
+            let help_text = "File Operations:\n\n- Press 'd' to delete file\n- Press 'c' to copy file\n- Press 'm' to move file\n- Press 'S' for full scan and size sorting";
             let paragraph = Paragraph::new(help_text)
-                .block(Block::default().borders(Borders::ALL).title("Full Scan"));
+                .block(Block::default().borders(Borders::ALL).title("File Operations"));
             f.render_widget(paragraph, right_chunks[1]);
         }
+        // No else condition - hide panel when not needed
 
         let file_op_keys = if app.focus == crate::PanelFocus::Right && (app.file_entries.is_some() || app.full_scan_results.is_some()) {
             "File operations: Up/Down = navigate, d = delete, c = copy, m = move"
@@ -290,7 +341,12 @@ pub fn draw_app<B: Backend>(
             "Keys: j/k = up/down, Ctrl-l/Ctrl-h = switch panels, r = refresh, q = quit, e = eject, s = scan, S = full scan\n{}",
             file_op_keys
         );
-        let legend = Paragraph::new(legend_text)
+        // Use smaller text for the legend
+        let legend_text_spans = Spans::from(vec![
+            Span::styled(legend_text, Style::default().add_modifier(Modifier::ITALIC).fg(Color::Gray))
+        ]);
+        
+        let legend = Paragraph::new(legend_text_spans)
             .block(Block::default().borders(Borders::ALL).title("Legend"));
         f.render_widget(legend, outer_chunks[1]);
 
@@ -367,6 +423,49 @@ pub fn draw_app<B: Backend>(
                 }
             },
             _ => {}
+        }
+        
+        // Show help popup if enabled
+        if app.show_help {
+            let help_area = centered_rect(70, 70, size);
+            
+            let help_text = "
+            LAZYSMG KEYBOARD SHORTCUTS
+
+Navigation:
+-----------
+j, Down       : Move down in current panel
+k, Up         : Move up in current panel
+Ctrl+h        : Focus left panel (devices)
+Ctrl+l        : Focus right panel (files)
+?             : Show/hide this help screen
+
+Device Operations:
+-----------------
+r             : Refresh device list
+e             : Eject selected device (if ejectable)
+
+File Operations (when right panel is focused):
+--------------------------------------------
+s             : Scan current directory (non-recursive)
+S             : Full device scan with progress bar
+d             : Delete selected file (requires confirmation)
+c             : Copy selected file (requires confirmation)
+m             : Move selected file (requires confirmation)
+
+General:
+-------
+q             : Quit application
+            ";
+            
+            let help_paragraph = Paragraph::new(help_text)
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .title("Help (press ? to close)")
+                    .border_style(Style::default().fg(Color::Cyan)))
+                .style(Style::default().fg(Color::White));
+            
+            f.render_widget(help_paragraph, help_area);
         }
     })?;
     Ok(())
