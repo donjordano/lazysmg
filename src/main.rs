@@ -323,12 +323,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 app.selected_file_index = 0;   // Reset selection
                 app.file_list_offset = 0;      // Reset scroll
                 
-                // We only need to trigger a new scan if we don't already have results for this device
-                let device_id = &app.devices[app.selected].name;
-                let needs_scan = !app.device_results.contains_key(device_id);
+                // Clear full scan results when switching devices
+                app.full_scan_results = None;
                 
-                if needs_scan {
-                    // Trigger an async directory listing
+                // Get current device ID
+                let device_id = &app.devices[app.selected].name;
+                
+                // First check if we have full scan results for this device
+                let has_full_scan = app.device_results.contains_key(device_id);
+                
+                if has_full_scan {
+                    // Use the cached full scan results
+                    if let Some(entries) = app.device_results.get(device_id) {
+                        app.file_entries = Some(entries.clone());
+                        app.full_scan_results = Some(entries.clone());
+                    }
+                } else {
+                    // No full scan results, do a regular directory listing
                     app.scanning = true;
                     app.file_entries = None;
                     
@@ -343,11 +354,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     
                     // Update mode to scanning
                     mode = AppMode::Scanning { device_index: app.selected, spinner_index: 0 };
-                } else {
-                    // Show cached results
-                    if let Some(entries) = app.device_results.get(device_id) {
-                        app.file_entries = Some(entries.clone());
-                    }
                 }
                 
                 // Update last_selected.

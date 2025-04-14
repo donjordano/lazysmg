@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
-    widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph, Row, Table},
+    widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph, Row, Table, Clear},
     Terminal,
 };
 use crate::{App, AppMode};
@@ -52,7 +52,7 @@ pub fn draw_app<B: Backend>(
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
             .split(outer_chunks[0]);
-            
+
         // Split right panel into top (file listing) and bottom (scan progress)
         let right_chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -82,14 +82,14 @@ pub fn draw_app<B: Backend>(
                 ListItem::new(Spans::from(text))
             })
             .collect();
-            
+
         // Set different block style based on focus
         let devices_block_style = if app.focus == crate::PanelFocus::Left {
-            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
-        
+
         let list = List::new(items)
             .block(Block::default()
                 .borders(Borders::ALL)
@@ -166,7 +166,7 @@ pub fn draw_app<B: Backend>(
 
         // Determine which files to display (regular listing or full scan results)
         let display_full_scan = app.full_scan_results.is_some() && !app.scan_progress.in_progress;
-        
+
         // Right top panel - File listing
         if (app.file_entries.is_some() && !app.scanning && !app.file_entries.as_ref().unwrap().is_empty()) || display_full_scan {
             let entries = if display_full_scan {
@@ -174,32 +174,32 @@ pub fn draw_app<B: Backend>(
             } else {
                 app.file_entries.as_ref().unwrap()
             };
-            
+
             let title = if display_full_scan {
                 "Files By Size (Descending)"
             } else {
                 "Files & Folders"
             };
-            
+
             // Apply scrolling by showing a window of entries
             let visible_entries: Vec<(usize, &crate::scanner::FileEntry)> = entries.iter()
                 .enumerate()
                 .skip(app.file_list_offset)
                 .take(20) // Show ~20 entries at a time
                 .collect();
-            
+
             // Show scroll indicators and count in the title
             let mut title = title.to_string();
             title = format!("{} [{}/{}]", title, app.selected_file_index + 1, entries.len());
-            
-            // Add up/down scroll indicators
+
+            // Add up/down scroll indicators with more visible characters
             if app.file_list_offset > 0 {
-                title = format!("↑ {} ↑", title);
+                title = format!("▲▲▲ {} ▲▲▲", title);
             }
             if app.file_list_offset + 20 < entries.len() {
-                title = format!("{} ↓", title);
+                title = format!("{} ▼▼▼", title);
             }
-            
+
             let rows: Vec<Row> = visible_entries.iter().map(|(idx, entry)| {
                 // Format file size in a more readable way (KB, MB, GB)
                 let size_str = if entry.size < 1024 {
@@ -211,28 +211,28 @@ pub fn draw_app<B: Backend>(
                 } else {
                     format!("{:.2} GB", entry.size as f64 / (1024.0 * 1024.0 * 1024.0))
                 };
-                
+
                 // Highlight the selected file
                 let style = if *idx == app.selected_file_index && app.focus == crate::PanelFocus::Right {
                     Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
-                
+
                 Row::new(vec![
                     Span::styled(entry.name.clone(), style),
                     Span::styled(entry.path.clone(), style),
                     Span::styled(size_str, style)
                 ])
             }).collect();
-            
+
             // Set different block style based on focus
             let right_block_style = if app.focus == crate::PanelFocus::Right {
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
-            
+
             let table = Table::new(rows)
                 .header(
                     Row::new(vec!["Name", "Path", "File Size"])
@@ -252,11 +252,11 @@ pub fn draw_app<B: Backend>(
         } else {
             // Set different block style based on focus
             let right_block_style = if app.focus == crate::PanelFocus::Right {
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
-            
+
             let right_panel = Paragraph::new(right_content)
                 .block(Block::default()
                     .borders(Borders::ALL)
@@ -264,7 +264,7 @@ pub fn draw_app<B: Backend>(
                     .border_style(right_block_style));
             f.render_widget(right_panel, right_chunks[0]);
         }
-        
+
         // Right bottom panel - Only show scan progress when in scan mode
         if app.scan_progress.in_progress || matches!(mode, AppMode::FullScan { .. }) {
             // Full scan in progress - show detailed progress
@@ -273,7 +273,7 @@ pub fn draw_app<B: Backend>(
             } else {
                 0
             };
-            
+
             // Format sizes in a readable way
             let scanned_str = if app.scan_progress.scanned_bytes < 1024 * 1024 {
                 format!("{:.2} KB", app.scan_progress.scanned_bytes as f64 / 1024.0)
@@ -282,7 +282,7 @@ pub fn draw_app<B: Backend>(
             } else {
                 format!("{:.2} GB", app.scan_progress.scanned_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
             };
-            
+
             let total_str = if app.scan_progress.total_bytes < 1024 * 1024 {
                 format!("{:.2} KB", app.scan_progress.total_bytes as f64 / 1024.0)
             } else if app.scan_progress.total_bytes < 1024 * 1024 * 1024 {
@@ -290,7 +290,7 @@ pub fn draw_app<B: Backend>(
             } else {
                 format!("{:.2} GB", app.scan_progress.total_bytes as f64 / (1024.0 * 1024.0 * 1024.0))
             };
-            
+
             // Progress bar
             let label = format!("Scanned: {} / {} ({}%)", scanned_str, total_str, progress_percent);
             let gauge = Gauge::default()
@@ -298,20 +298,20 @@ pub fn draw_app<B: Backend>(
                 .gauge_style(Style::default().fg(Color::Cyan).bg(Color::Black))
                 .percent(progress_percent)
                 .label(Span::raw(label));
-                
+
             let scan_stats = format!(
                 "Files processed: {}\nPress 'q' to quit or 'c' to cancel scan",
                 app.scan_progress.files_processed
             );
-            
+
             // Create a vertical layout for the gauge and stats text
             let progress_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
                 .split(right_chunks[1]);
-                
+
             f.render_widget(gauge, progress_chunks[0]);
-            
+
             let stats_paragraph = Paragraph::new(scan_stats)
                 .block(Block::default().borders(Borders::ALL).title("Scan Statistics"));
             f.render_widget(stats_paragraph, progress_chunks[1]);
@@ -324,7 +324,7 @@ pub fn draw_app<B: Backend>(
             f.render_widget(paragraph, right_chunks[1]);
         } else if app.focus == crate::PanelFocus::Right && (app.file_entries.is_some() || app.full_scan_results.is_some()) {
             // Show file operations help when files are displayed and right panel is focused
-            let help_text = "File Operations:\n\n- Press 'd' to delete file\n- Press 'c' to copy file\n- Press 'm' to move file\n- Press 'S' for full scan and size sorting";
+            let help_text = "\n\n- Press 'd' to delete file\n- Press 'c' to copy file\n- Press 'm' to move file\n- Press 'S' for full scan and size sorting";
             let paragraph = Paragraph::new(help_text)
                 .block(Block::default().borders(Borders::ALL).title("File Operations"));
             f.render_widget(paragraph, right_chunks[1]);
@@ -336,7 +336,7 @@ pub fn draw_app<B: Backend>(
         } else {
             ""
         };
-        
+
         let legend_text = format!(
             "Keys: j/k = up/down, Ctrl-l/Ctrl-h = switch panels, r = refresh, q = quit, e = eject, s = scan, S = full scan\n{}",
             file_op_keys
@@ -345,7 +345,7 @@ pub fn draw_app<B: Backend>(
         let legend_text_spans = Spans::from(vec![
             Span::styled(legend_text, Style::default().add_modifier(Modifier::ITALIC).fg(Color::Gray))
         ]);
-        
+
         let legend = Paragraph::new(legend_text_spans)
             .block(Block::default().borders(Borders::ALL).title("Legend"));
         f.render_widget(legend, outer_chunks[1]);
@@ -354,6 +354,10 @@ pub fn draw_app<B: Backend>(
             AppMode::ConfirmEject(index) => {
                 if let Some(device) = app.devices.get(*index) {
                     let popup_area = centered_rect(60, 20, size);
+
+                    // First, render a clear background to make it fully opaque
+                    f.render_widget(Clear, popup_area);
+
                     let text = format!(
                         "Are you sure you want to eject this device?\n(Device: {})\nPress Y to confirm, N to cancel.",
                         device.name
@@ -361,25 +365,49 @@ pub fn draw_app<B: Backend>(
                     let block = Block::default()
                         .borders(Borders::ALL)
                         .title("Confirm Eject")
-                        .style(Style::default().fg(Color::White).bg(Color::Black));
+                        .style(Style::default().fg(Color::White).bg(Color::DarkGray));
                     let paragraph = Paragraph::new(text).block(block);
                     f.render_widget(paragraph, popup_area);
                 }
             },
             AppMode::Ejected(msg) => {
                 let popup_area = centered_rect(60, 20, size);
+
+                // Clear the background first
+                f.render_widget(Clear, popup_area);
+
                 let text = format!("{}\nPress any key to continue.", msg);
                 let block = Block::default()
                     .borders(Borders::ALL)
                     .title("Ejection Result")
-                    .style(Style::default().fg(Color::White).bg(Color::Black));
+                    .style(Style::default().fg(Color::White).bg(Color::DarkGray));
                 let paragraph = Paragraph::new(text).block(block);
                 f.render_widget(paragraph, popup_area);
             },
-            AppMode::ConfirmFileOp { op_type, file_index: _, target_path } => {
-                if let Some(file) = app.get_selected_file_entry() {
+            AppMode::ConfirmFileOp { op_type, file_index, target_path } => {
+                // First get the correct file based on the stored index
+                let file_option = if let Some(ref entries) = app.full_scan_results {
+                    if *file_index < entries.len() {
+                        Some(&entries[*file_index])
+                    } else {
+                        None
+                    }
+                } else if let Some(ref entries) = app.file_entries {
+                    if *file_index < entries.len() {
+                        Some(&entries[*file_index])
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(file) = file_option {
                     let popup_area = centered_rect(70, 30, size);
-                    
+
+                    // Clear the background first
+                    f.render_widget(Clear, popup_area);
+
                     let (title, message) = match op_type {
                         crate::FileOperation::Copy => {
                             // Fix temporary value issue by creating a longer-lived default string
@@ -413,22 +441,25 @@ pub fn draw_app<B: Backend>(
                             )
                         ),
                     };
-                    
+
                     let block = Block::default()
                         .borders(Borders::ALL)
                         .title(title)
-                        .style(Style::default().fg(Color::White).bg(Color::Black));
+                        .style(Style::default().fg(Color::White).bg(Color::DarkGray));
                     let paragraph = Paragraph::new(message).block(block);
                     f.render_widget(paragraph, popup_area);
                 }
             },
             _ => {}
         }
-        
+
         // Show help popup if enabled
         if app.show_help {
             let help_area = centered_rect(70, 70, size);
-            
+
+            // Clear the background first
+            f.render_widget(Clear, help_area);
+
             let help_text = "
             LAZYSMG KEYBOARD SHORTCUTS
 
@@ -457,14 +488,15 @@ General:
 -------
 q             : Quit application
             ";
-            
+
             let help_paragraph = Paragraph::new(help_text)
                 .block(Block::default()
                     .borders(Borders::ALL)
                     .title("Help (press ? to close)")
-                    .border_style(Style::default().fg(Color::Cyan)))
+                    .border_style(Style::default().fg(Color::Cyan))
+                    .style(Style::default().bg(Color::DarkGray)))
                 .style(Style::default().fg(Color::White));
-            
+
             f.render_widget(help_paragraph, help_area);
         }
     })?;

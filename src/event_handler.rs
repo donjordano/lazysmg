@@ -23,7 +23,7 @@ pub async fn process_event(
                 },
                 _ => {}
             }
-            
+
             // Handle panel switching with Ctrl-l and Ctrl-h.
             if key.modifiers.contains(KeyModifiers::CONTROL) {
                 match key.code {
@@ -74,7 +74,7 @@ pub async fn process_event(
                             KeyCode::Char('c') if app.focus == crate::PanelFocus::Right => {
                                 if let Some(file) = app.get_selected_file_entry() {
                                     // For now, set a dummy target path
-                                    let target_path = format!("{}/copied_{}", app.devices[app.selected].mount_point, 
+                                    let target_path = format!("{}/copied_{}", app.devices[app.selected].mount_point,
                                         std::path::Path::new(&file.path).file_name().unwrap_or_default().to_string_lossy());
                                     *mode = AppMode::ConfirmFileOp {
                                         op_type: crate::FileOperation::Copy,
@@ -115,7 +115,7 @@ pub async fn process_event(
                                     let device = &app.devices[app.selected];
                                     let mount = device.mount_point.clone();
                                     let total_size = device.total_space;
-                                    
+
                                     // Set up progress tracking
                                     app.scan_progress = ScanProgress {
                                         total_bytes: total_size,
@@ -123,20 +123,20 @@ pub async fn process_event(
                                         files_processed: 0,
                                         in_progress: true,
                                     };
-                                    
+
                                     // Create a clone of the progress channel
                                     let progress_sender = progress_tx.clone();
-                                    
+
                                     // Spawn the full scan task
                                     tokio::spawn(async move {
                                         let _ = tokio::task::spawn_blocking(move || {
                                             full_scan_with_progress(&mount, total_size, progress_sender)
                                         }).await;
                                     });
-                                    
-                                    *mode = AppMode::FullScan { 
-                                        device_index: app.selected, 
-                                        spinner_index: 0 
+
+                                    *mode = AppMode::FullScan {
+                                        device_index: app.selected,
+                                        spinner_index: 0
                                     };
                                 }
                             },
@@ -151,7 +151,7 @@ pub async fn process_event(
                                     let device_name = device.name.clone();
                                     // Unused variable - remove it
                                     // let device_mount = device.mount_point.clone();
-                                    
+
                                     match macos::eject_device(device) {
                                         Ok(()) => {
                                             // Use refresh instead of manual removal to ensure consistency
@@ -187,21 +187,21 @@ pub async fn process_event(
                                 let op_type_clone = op_type.clone();
                                 let file_index_clone = *file_index;
                                 let target_path_clone = target_path.clone();
-                                
+
                                 // Get the source file path
                                 if let Some(file) = app.get_selected_file_entry() {
                                     let source_path = file.path.clone();
-                                    
+
                                     // Perform the file operation
                                     match perform_file_operation(
-                                        &op_type_clone, 
-                                        &source_path, 
+                                        &op_type_clone,
+                                        &source_path,
                                         target_path_clone.as_deref()
                                     ) {
                                         Ok(result) => {
                                             // Refresh file list after the operation
                                             app.selected_file_index = 0;
-                                            
+
                                             if let Some(ref mut entries) = app.full_scan_results {
                                                 // For deletion, remove from the list
                                                 if let FileOperation::Delete = op_type_clone {
@@ -210,21 +210,21 @@ pub async fn process_event(
                                                     }
                                                 }
                                             }
-                                            
+
                                             // Trigger a refresh of the regular file listing as well
                                             app.file_entries = None;
                                             app.scanning = true;
                                             let mount = app.devices[app.selected].mount_point.clone();
                                             let sender = async_tx.clone();
                                             tokio::spawn(async move {
-                                                let result = tokio::task::spawn_blocking(move || 
+                                                let result = tokio::task::spawn_blocking(move ||
                                                     crate::scanner::list_directory(&mount)
-                                                ).await.unwrap_or_else(|e| 
+                                                ).await.unwrap_or_else(|e|
                                                     Err(Box::new(e) as Box<dyn Error + Send + 'static>)
                                                 );
                                                 let _ = sender.send(result).await;
                                             });
-                                            
+
                                             *mode = AppMode::Ejected(format!("File operation result: {}", result));
                                         },
                                         Err(err) => {
@@ -279,11 +279,11 @@ pub fn start_device_listener(tx: mpsc::Sender<Vec<crate::platform::macos::Storag
     thread::spawn(move || {
         let mut old_devices = crate::platform::macos::detect_storage_devices();
         let mut last_check = std::time::Instant::now();
-        
+
         loop {
             // Always check if we have an ejection event
             let new_devices = crate::platform::macos::detect_storage_devices();
-            
+
             // Send updated devices if there's a change or after a full refresh interval
             let time_since_refresh = last_check.elapsed();
             if new_devices != old_devices || time_since_refresh.as_secs() >= 5 {
@@ -294,7 +294,7 @@ pub fn start_device_listener(tx: mpsc::Sender<Vec<crate::platform::macos::Storag
                 old_devices = new_devices;
                 last_check = std::time::Instant::now();
             }
-            
+
             thread::sleep(Duration::from_millis(500));
         }
     });
