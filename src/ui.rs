@@ -93,7 +93,7 @@ pub fn draw_app<B: Backend>(
         let list = List::new(items)
             .block(Block::default()
                 .borders(Borders::ALL)
-                .title("Devices")
+                .title("[ Devices ]")
                 .border_style(devices_block_style))
             .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
             .highlight_symbol(">> ");
@@ -121,7 +121,7 @@ pub fn draw_app<B: Backend>(
             "No devices found.".to_string()
         };
         let details_paragraph = Paragraph::new(device_details)
-            .block(Block::default().borders(Borders::ALL).title("Device Details"));
+            .block(Block::default().borders(Borders::ALL).title("[ Device Details ]"));
         f.render_widget(details_paragraph, details_and_gauge[0]);
 
         // Left panel: Progress Bar gauge.
@@ -137,7 +137,7 @@ pub fn draw_app<B: Backend>(
             };
             let label = format!("Used: {}%", percent);
             let gauge = Gauge::default()
-                .block(Block::default().borders(Borders::ALL).title("Usage"))
+                .block(Block::default().borders(Borders::ALL).title("[ Usage ]"))
                 .gauge_style(Style::default().fg(Color::Magenta).bg(Color::Black))
                 .percent(percent)
                 .label(Span::raw(label));
@@ -145,7 +145,7 @@ pub fn draw_app<B: Backend>(
         } else {
             // If no devices, display a placeholder.
             let placeholder = Paragraph::new("No device available")
-                .block(Block::default().borders(Borders::ALL).title("Usage"));
+                .block(Block::default().borders(Borders::ALL).title("[ Usage ]"));
             f.render_widget(placeholder, details_and_gauge[1]);
         }
 
@@ -176,9 +176,9 @@ pub fn draw_app<B: Backend>(
             };
 
             let title = if display_full_scan {
-                "Files By Size (Descending)"
+                "[ Files By Size (Descending) ]"
             } else {
-                "Files & Folders"
+                "[ Files & Folders ]"
             };
 
             // Apply scrolling by showing a window of entries
@@ -260,7 +260,7 @@ pub fn draw_app<B: Backend>(
             let right_panel = Paragraph::new(right_content)
                 .block(Block::default()
                     .borders(Borders::ALL)
-                    .title("Files & Folders")
+                    .title("[ Files & Folders ]")
                     .border_style(right_block_style));
             f.render_widget(right_panel, right_chunks[0]);
         }
@@ -294,7 +294,7 @@ pub fn draw_app<B: Backend>(
             // Progress bar
             let label = format!("Scanned: {} / {} ({}%)", scanned_str, total_str, progress_percent);
             let gauge = Gauge::default()
-                .block(Block::default().borders(Borders::ALL).title("Full Scan Progress"))
+                .block(Block::default().borders(Borders::ALL).title("[ Full Scan Progress ]"))
                 .gauge_style(Style::default().fg(Color::Cyan).bg(Color::Black))
                 .percent(progress_percent)
                 .label(Span::raw(label));
@@ -313,20 +313,20 @@ pub fn draw_app<B: Backend>(
             f.render_widget(gauge, progress_chunks[0]);
 
             let stats_paragraph = Paragraph::new(scan_stats)
-                .block(Block::default().borders(Borders::ALL).title("Scan Statistics"));
+                .block(Block::default().borders(Borders::ALL).title("[ Scan Statistics ]"));
             f.render_widget(stats_paragraph, progress_chunks[1]);
         } else if let AppMode::FullScan { spinner_index, .. } = mode {
             // Full scan is initializing
             let spinner = spinner_chars[*spinner_index];
             let text = format!("{} Preparing full scan...", spinner);
             let paragraph = Paragraph::new(text)
-                .block(Block::default().borders(Borders::ALL).title("Full Scan"));
+                .block(Block::default().borders(Borders::ALL).title("[ Full Scan ]"));
             f.render_widget(paragraph, right_chunks[1]);
         } else if app.focus == crate::PanelFocus::Right && (app.file_entries.is_some() || app.full_scan_results.is_some()) {
             // Show file operations help when files are displayed and right panel is focused
             let help_text = "\n\n- Press 'd' to delete file\n- Press 'c' to copy file\n- Press 'm' to move file\n- Press 'S' for full scan and size sorting";
             let paragraph = Paragraph::new(help_text)
-                .block(Block::default().borders(Borders::ALL).title("File Operations"));
+                .block(Block::default().borders(Borders::ALL).title("[ File Operations ]"));
             f.render_widget(paragraph, right_chunks[1]);
         }
         // No else condition - hide panel when not needed
@@ -338,16 +338,16 @@ pub fn draw_app<B: Backend>(
         };
 
         let legend_text = format!(
-            "Keys: j/k = up/down, Ctrl-l/Ctrl-h = switch panels, r = refresh, q = quit, e = eject, s = scan, S = full scan\n{}",
+            "j/k = up/down | Ctrl-l/Ctrl-h = switch panels | q = quit | ? = Help ...\n{}",
             file_op_keys
         );
         // Use smaller text for the legend
         let legend_text_spans = Spans::from(vec![
-            Span::styled(legend_text, Style::default().add_modifier(Modifier::ITALIC).fg(Color::Gray))
+            Span::styled(legend_text, Style::default().add_modifier(Modifier::DIM).fg(Color::White))
         ]);
 
         let legend = Paragraph::new(legend_text_spans)
-            .block(Block::default().borders(Borders::ALL).title("Legend"));
+            .block(Block::default().borders(Borders::ALL).title("[ Legend ]"));
         f.render_widget(legend, outer_chunks[1]);
 
         match mode {
@@ -364,7 +364,7 @@ pub fn draw_app<B: Backend>(
                     );
                     let block = Block::default()
                         .borders(Borders::ALL)
-                        .title("Confirm Eject")
+                        .title("[ Confirm Eject ]")
                         .style(Style::default().fg(Color::White).bg(Color::DarkGray));
                     let paragraph = Paragraph::new(text).block(block);
                     f.render_widget(paragraph, popup_area);
@@ -379,7 +379,7 @@ pub fn draw_app<B: Backend>(
                 let text = format!("{}\nPress any key to continue.", msg);
                 let block = Block::default()
                     .borders(Borders::ALL)
-                    .title("Ejection Result")
+                    .title("[ Ejection Result ]")
                     .style(Style::default().fg(Color::White).bg(Color::DarkGray));
                 let paragraph = Paragraph::new(text).block(block);
                 f.render_widget(paragraph, popup_area);
@@ -410,11 +410,10 @@ pub fn draw_app<B: Backend>(
 
                     let (title, message) = match op_type {
                         crate::FileOperation::Copy => {
-                            // Fix temporary value issue by creating a longer-lived default string
                             let default_dest = "destination".to_string();
                             let target = target_path.as_ref().unwrap_or(&default_dest);
                             (
-                                "Confirm Copy",
+                                "[ Confirm Copy ]",
                                 format!(
                                     "Are you sure you want to copy this file?\n\nSource: {}\nDestination: {}\n\nPress Y to confirm, N to cancel.",
                                     file.path, target
@@ -422,11 +421,10 @@ pub fn draw_app<B: Backend>(
                             )
                         },
                         crate::FileOperation::Move => {
-                            // Fix temporary value issue by creating a longer-lived default string
                             let default_dest = "destination".to_string();
                             let target = target_path.as_ref().unwrap_or(&default_dest);
                             (
-                                "Confirm Move",
+                                "[ Confirm Move ]",
                                 format!(
                                     "Are you sure you want to move this file?\n\nSource: {}\nDestination: {}\n\nPress Y to confirm, N to cancel.",
                                     file.path, target
@@ -434,7 +432,7 @@ pub fn draw_app<B: Backend>(
                             )
                         },
                         crate::FileOperation::Delete => (
-                            "Confirm Delete",
+                            "[ Confirm Delete ]",
                             format!(
                                 "Are you sure you want to delete this file?\n\nFile: {}\n\nThis action cannot be undone!\n\nPress Y to confirm, N to cancel.",
                                 file.path
@@ -492,7 +490,7 @@ q             : Quit application
             let help_paragraph = Paragraph::new(help_text)
                 .block(Block::default()
                     .borders(Borders::ALL)
-                    .title("Help (press ? to close)")
+                    .title("[ Help (press ? to close) ]")
                     .border_style(Style::default().fg(Color::Cyan))
                     .style(Style::default().bg(Color::DarkGray)))
                 .style(Style::default().fg(Color::White));
