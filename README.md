@@ -1,7 +1,3 @@
-Below is a complete README file that documents your project in detail. This README explains what the project does, its overall structure, features, build instructions, and usage information for your open‑source community.
-
----
-
 # Lazy Storage Manager
 
 Lazy Storage Manager is a modular terminal-based application written in Rust for managing HDD/SSD storage. Currently, it targets macOS but is designed with a modular architecture that makes it easy to extend support to Linux and Windows in the future.
