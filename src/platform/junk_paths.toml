@@ -1,0 +1,35 @@
+[macos]
+# Common directories where junk (cache, logs, derived data, etc.) accumulates on macOS
+paths = [
+  "~/Library/Caches/",
+  "/Library/Caches/",
+  "~/Library/Logs/",
+  "/Library/Logs/",
+  "~/Library/Developer/Xcode/DerivedData/",
+  "~/.Trash/",
+  "/Volumes/*/.Trashes/",
+  "~/Library/Application Support/MobileSync/Backup/",
+  "~/Library/Safari/",
+  "~/Library/Caches/com.apple.Safari/"
+]
+
+[linux]
+# Common junk directories on Linux
+paths = [
+  "~/.cache/",
+  "/var/cache/",
+  "/var/log/",
+  "/tmp/",
+  "~/.local/share/Trash/files/"
+]
+
+[windows]
+# Common junk directories on Windows. Environment variables (%TEMP%) can later be expanded.
+paths = [
+  "%TEMP%",
+  "C:\\Windows\\Temp\\",
+  "C:\\Windows\\Logs\\",
+  "C:\\Users\\$USER\\AppData\\Local\\Temp\\",
+  "C:\\Users\\$USER\\AppData\\Local\\Microsoft\\Windows\\INetCache\\",
+  "C:\\Windows\\SoftwareDistribution\\Download\\"
+]
