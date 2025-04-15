@@ -14,8 +14,8 @@ use crate::scanner::{FileEntry, ScanProgressMessage};
 #[derive(Debug, Deserialize)]
 pub struct JunkPathsConfig {
     macos: JunkPathsSection,
-    linux: JunkPathsSection,
-    windows: JunkPathsSection,
+    // linux: JunkPathsSection,
+    // windows: JunkPathsSection,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,7 +34,7 @@ pub struct JunkScanResults {
 /// Summary information for a folder with junk files
 #[derive(Debug, Clone)]
 pub struct FolderSummary {
-    pub path: String,
+    // pub path: String,
     pub files: Vec<FileEntry>,
     pub total_size: u64,
 }
@@ -65,7 +65,7 @@ impl JunkScanResults {
 
         // Add or update folder summary
         let folder_summary = self.folders.entry(parent_path.clone()).or_insert_with(|| FolderSummary {
-            path: parent_path,
+            //path: parent_path,
             files: Vec::new(),
             total_size: 0,
         });
@@ -85,13 +85,13 @@ impl JunkScanResults {
     /// Convert results to a flat list of file entries sorted by size
     pub fn to_file_entries(&self) -> Vec<FileEntry> {
         let mut result = Vec::new();
-        
+
         for folder in self.folders.values() {
             for file in &folder.files {
                 result.push(file.clone());
             }
         }
-        
+
         result.sort_by(|a, b| b.size.cmp(&a.size));
         result
     }
@@ -103,27 +103,27 @@ pub fn load_junk_paths_config() -> Result<JunkPathsConfig, Box<dyn Error>> {
         .join("src")
         .join("platform")
         .join("junk_paths.toml");
-    
+
     let content = fs::read_to_string(config_path)?;
     let config: JunkPathsConfig = toml::from_str(&content)?;
-    
+
     Ok(config)
 }
 
 /// Get junk paths for the current OS, with expanded home directories
 pub fn get_junk_paths_for_current_os() -> Result<Vec<String>, Box<dyn Error>> {
     let config = load_junk_paths_config()?;
-    
+
     // Get paths for the current OS
     #[cfg(target_os = "macos")]
     let paths = config.macos.paths;
-    
+
     #[cfg(target_os = "linux")]
     let paths = config.linux.paths;
-    
+
     #[cfg(target_os = "windows")]
     let paths = config.windows.paths;
-    
+
     // Expand paths (~ and environment variables)
     let expanded_paths = paths.iter()
         .filter_map(|path| {
@@ -136,7 +136,7 @@ pub fn get_junk_paths_for_current_os() -> Result<Vec<String>, Box<dyn Error>> {
             }
         })
         .collect();
-    
+
     Ok(expanded_paths)
 }
 
@@ -147,14 +147,14 @@ pub async fn scan_system_junk(
 ) -> Result<JunkScanResults, Box<dyn Error>> {
     let junk_paths = get_junk_paths_for_current_os()?;
     let mut results = JunkScanResults::new();
-    
+
     // Scan each junk path
     for base_path in junk_paths {
         // Skip if path doesn't exist
         if !PathBuf::from(&base_path).exists() {
             continue;
         }
-        
+
         // Walk directory
         for entry in WalkDir::new(&base_path)
             .parallelism(Parallelism::RayonDefaultPool {
@@ -172,23 +172,23 @@ pub async fn scan_system_junk(
                         .file_name()
                         .map(|os_str| os_str.to_string_lossy().into_owned())
                         .unwrap_or_else(|| path.to_string_lossy().into_owned());
-                    
+
                     // Create file entry
                     let file_entry = FileEntry {
                         name,
                         path: path.to_string_lossy().into_owned(),
                         size,
                     };
-                    
+
                     // Add file to results
                     results.add_file(file_entry.clone());
-                    
+
                     // Send progress update
-                    let progress_msg = ScanProgressMessage::FileScanned { 
+                    let progress_msg = ScanProgressMessage::FileScanned {
                         size,
                         path: path.to_string_lossy().into_owned(),
                     };
-                    
+
                     // Only log errors in debug mode
                     if let Err(_) = progress_tx.send(progress_msg).await {
                         // Channel closed, likely because the app is shutting down
@@ -199,21 +199,21 @@ pub async fn scan_system_junk(
             }
         }
     }
-    
+
     // Sort results
     results.sort_by_size();
-    
+
     // Send completion message
-    let completion_msg = ScanProgressMessage::JunkScanComplete { 
+    let completion_msg = ScanProgressMessage::JunkScanComplete {
         results: results.to_file_entries(),
         files_processed: results.total_files,
         folder_summaries: results.folders.iter()
             .map(|(path, summary)| (path.clone(), summary.total_size, summary.files.len()))
             .collect(),
     };
-    
+
     // Ignore errors - the app may have been closed
     let _ = progress_tx.send(completion_msg).await;
-    
+
     Ok(results)
 }
