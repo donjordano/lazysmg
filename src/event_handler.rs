@@ -122,6 +122,7 @@ pub async fn process_event(
                                         scanned_bytes: 0,
                                         files_processed: 0,
                                         in_progress: true,
+                                        current_file: None,
                                     };
 
                                     // Create a clone of the progress channel

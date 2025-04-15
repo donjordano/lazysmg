@@ -299,9 +299,26 @@ pub fn draw_app<B: Backend>(
                 .percent(progress_percent)
                 .label(Span::raw(label));
 
+            // Display the current file being processed if available
+            let current_file = if let Some(ref file_path) = app.scan_progress.current_file {
+                // Truncate the path if it's too long
+                let max_length = 60;
+                if file_path.len() > max_length {
+                    // Truncate the middle of the path
+                    let start = &file_path[0..30];
+                    let end = &file_path[file_path.len() - 30..];
+                    format!("{}...{}", start, end)
+                } else {
+                    file_path.clone()
+                }
+            } else {
+                "".to_string()
+            };
+
             let scan_stats = format!(
-                "Files processed: {}\nPress 'q' to quit or 'c' to cancel scan",
-                app.scan_progress.files_processed
+                "Files processed: {}\nCurrent file: {}\nPress 'q' to quit or 'c' to cancel scan",
+                app.scan_progress.files_processed,
+                current_file
             );
 
             // Create a vertical layout for the gauge and stats text

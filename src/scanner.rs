@@ -107,9 +107,11 @@ pub fn list_directory(start_path: &str) -> Result<Vec<FileEntry>, Box<dyn Error 
 pub enum ScanProgressMessage {
     FileScanned {
         size: u64,
+        path: String,
     },
     ScanComplete {
         results: Vec<FileEntry>,
+        files_processed: usize,
     },
 }
 
@@ -141,9 +143,13 @@ pub fn full_scan_with_progress(
                     .map(|os_str| os_str.to_string_lossy().into_owned())
                     .unwrap_or_else(|| path.to_string_lossy().into_owned());
                 
-                // Send progress update
+                // Send progress update with file path
                 let tx = Arc::clone(&progress_tx);
-                let progress_msg = ScanProgressMessage::FileScanned { size };
+                let file_path = path.to_string_lossy().into_owned();
+                let progress_msg = ScanProgressMessage::FileScanned { 
+                    size,
+                    path: file_path.clone()
+                };
                 if let Err(e) = tx.blocking_send(progress_msg) {
                     eprintln!("Failed to send progress update: {}", e);
                 }
@@ -164,8 +170,12 @@ pub fn full_scan_with_progress(
     // Sort files by size (largest first)
     files.sort_by(|a, b| b.size.cmp(&a.size));
     
-    // Send completion message with results
-    let complete_msg = ScanProgressMessage::ScanComplete { results: files };
+    // Send completion message with results and file count
+    let files_processed = files.len();
+    let complete_msg = ScanProgressMessage::ScanComplete { 
+        results: files,
+        files_processed 
+    };
     if let Err(e) = progress_tx.blocking_send(complete_msg) {
         eprintln!("Failed to send scan completion message: {}", e);
     }

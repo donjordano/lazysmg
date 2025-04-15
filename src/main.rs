@@ -51,10 +51,11 @@ pub enum FileOperation {
 /// Tracks progress during a full storage scan
 #[derive(Debug, Clone)]
 pub struct ScanProgress {
-    pub total_bytes: u64,     // Total size of the storage device
-    pub scanned_bytes: u64,   // Total bytes scanned so far
-    pub files_processed: u64, // Number of files processed
-    pub in_progress: bool,    // Whether a full scan is in progress
+    pub total_bytes: u64,         // Total size of the storage device
+    pub scanned_bytes: u64,       // Total bytes scanned so far
+    pub files_processed: u64,     // Number of files processed
+    pub in_progress: bool,        // Whether a full scan is in progress
+    pub current_file: Option<String>, // Currently being processed file
 }
 
 /// Main application state.
@@ -88,6 +89,7 @@ impl App {
                 scanned_bytes: 0,
                 files_processed: 0,
                 in_progress: false,
+                current_file: None,
             },
             selected_file_index: 0,
             clipboard: None,
@@ -392,11 +394,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // Check for progress updates
             while let Ok(progress_msg) = progress_rx.try_recv() {
                 match progress_msg {
-                    scanner::ScanProgressMessage::FileScanned { size } => {
+                    scanner::ScanProgressMessage::FileScanned { size, path } => {
                         app.scan_progress.scanned_bytes += size;
                         app.scan_progress.files_processed += 1;
+                        app.scan_progress.current_file = Some(path);
                     },
-                    scanner::ScanProgressMessage::ScanComplete { results } => {
+                    scanner::ScanProgressMessage::ScanComplete { results, files_processed } => {
                         // Store full scan results in both places
                         app.full_scan_results = Some(results.clone());
                         
@@ -407,6 +410,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                         
                         app.scan_progress.in_progress = false;
+                        app.scan_progress.files_processed = files_processed as u64;
+                        app.scan_progress.current_file = None;
                         mode = AppMode::Normal;
                     }
                 }
