@@ -113,6 +113,11 @@ pub enum ScanProgressMessage {
         results: Vec<FileEntry>,
         files_processed: usize,
     },
+    JunkScanComplete {
+        results: Vec<FileEntry>,
+        files_processed: usize,
+        folder_summaries: Vec<(String, u64, usize)>, // path, size, file count
+    },
 }
 
 /// Performs a full scan of the storage device, reporting progress via the progress channel.

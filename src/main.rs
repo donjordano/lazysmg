@@ -17,7 +17,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use ui::draw_app;
 use event_handler::process_event;
 use platform::macos::{detect_storage_devices, StorageDevice};
-use scanner::{FileEntry, list_directory};
+use scanner::{FileEntry, list_directory, ScanProgressMessage};
 
 /// Which panel is focused.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,6 +48,23 @@ pub enum FileOperation {
     Delete,
 }
 
+/// Different scanning modes for the application
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScanMode {
+    /// Regular full scan of a device (external or ejectable)
+    FullScan,
+    /// Junk scan mode (system storage only)
+    JunkScan,
+}
+
+/// Summary of a folder containing junk files
+#[derive(Debug, Clone)]
+pub struct FolderSummary {
+    pub path: String,
+    pub total_size: u64,
+    pub file_count: usize,
+}
+
 /// Tracks progress during a full storage scan
 #[derive(Debug, Clone)]
 pub struct ScanProgress {
@@ -73,6 +90,10 @@ pub struct App {
     pub file_list_offset: usize,                   // scrolling offset for file list
     pub device_results: std::collections::HashMap<String, Vec<FileEntry>>, // results per device
     pub show_help: bool,                          // whether to show the help overlay
+    pub scan_mode: ScanMode,                      // current scan mode
+    pub folder_summaries: Option<Vec<FolderSummary>>, // folder summaries for junk scan
+    pub selected_folder_index: usize,             // selected folder in junk scan view
+    pub folder_view_mode: bool,                   // whether we're viewing folders or files
 }
 
 impl App {
@@ -96,6 +117,10 @@ impl App {
             file_list_offset: 0,
             device_results: std::collections::HashMap::new(),
             show_help: false,
+            scan_mode: ScanMode::FullScan,
+            folder_summaries: None,
+            selected_folder_index: 0,
+            folder_view_mode: false,
         }
     }
 
@@ -394,12 +419,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // Check for progress updates
             while let Ok(progress_msg) = progress_rx.try_recv() {
                 match progress_msg {
-                    scanner::ScanProgressMessage::FileScanned { size, path } => {
+                    ScanProgressMessage::FileScanned { size, path } => {
                         app.scan_progress.scanned_bytes += size;
                         app.scan_progress.files_processed += 1;
                         app.scan_progress.current_file = Some(path);
                     },
-                    scanner::ScanProgressMessage::ScanComplete { results, files_processed } => {
+                    ScanProgressMessage::ScanComplete { results, files_processed } => {
                         // Store full scan results in both places
                         app.full_scan_results = Some(results.clone());
                         
@@ -412,6 +437,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         app.scan_progress.in_progress = false;
                         app.scan_progress.files_processed = files_processed as u64;
                         app.scan_progress.current_file = None;
+                        app.folder_summaries = None; // No folder summaries for regular scans
+                        mode = AppMode::Normal;
+                    },
+                    ScanProgressMessage::JunkScanComplete { results, files_processed, folder_summaries } => {
+                        // Store full scan results in both places
+                        app.full_scan_results = Some(results.clone());
+                        
+                        // Convert folder summaries to a format we can store
+                        let summaries = folder_summaries
+                            .into_iter()
+                            .map(|(path, size, count)| FolderSummary {
+                                path,
+                                total_size: size,
+                                file_count: count,
+                            })
+                            .collect();
+                        
+                        app.folder_summaries = Some(summaries);
+                        
+                        // Also store in device cache if device is available
+                        if !app.devices.is_empty() {
+                            let device_id = app.devices[app.selected].name.clone();
+                            app.device_results.insert(device_id, results);
+                        }
+                        
+                        app.scan_progress.in_progress = false;
+                        app.scan_progress.files_processed = files_processed as u64;
+                        app.scan_progress.current_file = None;
+                        app.scan_mode = ScanMode::JunkScan;
                         mode = AppMode::Normal;
                     }
                 }

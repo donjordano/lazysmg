@@ -164,11 +164,87 @@ pub fn draw_app<B: Backend>(
             "Loading files..."
         };
 
-        // Determine which files to display (regular listing or full scan results)
+        // Determine which files to display (regular listing, full scan, or folder view)
         let display_full_scan = app.full_scan_results.is_some() && !app.scan_progress.in_progress;
+        let display_folder_view = app.folder_summaries.is_some() && app.folder_view_mode;
 
-        // Right top panel - File listing
-        if (app.file_entries.is_some() && !app.scanning && !app.file_entries.as_ref().unwrap().is_empty()) || display_full_scan {
+        // Right top panel - Folder summaries (for junk scan)
+        if display_folder_view && app.folder_summaries.is_some() {
+            let folder_summaries = app.folder_summaries.as_ref().unwrap();
+            
+            let title = "[ Junk Files by Folder ]";
+            
+            // Apply scrolling by showing a window of folders
+            let visible_folders: Vec<(usize, &crate::FolderSummary)> = folder_summaries.iter()
+                .enumerate()
+                .skip(app.file_list_offset)
+                .take(20) // Show ~20 folders at a time
+                .collect();
+            
+            // Show scroll indicators and count in the title
+            let mut title = title.to_string();
+            title = format!("{} [{}/{}]", title, app.selected_folder_index + 1, folder_summaries.len());
+            
+            // Add up/down scroll indicators
+            if app.file_list_offset > 0 {
+                title = format!("↟ {} ", title);
+            }
+            if app.file_list_offset + 20 < folder_summaries.len() {
+                title = format!("{} ↡", title);
+            }
+            
+            let rows: Vec<Row> = visible_folders.iter().map(|(idx, folder)| {
+                // Format folder size in a more readable way (KB, MB, GB)
+                let size_str = if folder.total_size < 1024 {
+                    format!("{} B", folder.total_size)
+                } else if folder.total_size < 1024 * 1024 {
+                    format!("{:.2} KB", folder.total_size as f64 / 1024.0)
+                } else if folder.total_size < 1024 * 1024 * 1024 {
+                    format!("{:.2} MB", folder.total_size as f64 / (1024.0 * 1024.0))
+                } else {
+                    format!("{:.2} GB", folder.total_size as f64 / (1024.0 * 1024.0 * 1024.0))
+                };
+                
+                // Highlight the selected folder
+                let style = if *idx == app.selected_folder_index && app.focus == crate::PanelFocus::Right {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                };
+                
+                Row::new(vec![
+                    Span::styled(folder.path.clone(), style),
+                    Span::styled(size_str, style),
+                    Span::styled(format!("{}", folder.file_count), style)
+                ])
+            }).collect();
+            
+            // Set different block style based on focus
+            let right_block_style = if app.focus == crate::PanelFocus::Right {
+                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            
+            let table = Table::new(rows)
+                .header(
+                    Row::new(vec!["Folder Path", "Total Size", "Files"])
+                        .style(Style::default().fg(Color::LightBlue))
+                        .bottom_margin(1),
+                )
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .title(title)
+                    .border_style(right_block_style))
+                .widths(&[
+                    Constraint::Percentage(70),
+                    Constraint::Percentage(20),
+                    Constraint::Percentage(10),
+                ]);
+            f.render_widget(table, right_chunks[0]);
+        }
+        // Right top panel - File listing (normal or full scan)
+        else if (app.file_entries.is_some() && !app.scanning && !app.file_entries.as_ref().unwrap().is_empty()) || display_full_scan {
             let entries = if display_full_scan {
                 app.full_scan_results.as_ref().unwrap()
             } else {
@@ -339,12 +415,29 @@ pub fn draw_app<B: Backend>(
             let paragraph = Paragraph::new(text)
                 .block(Block::default().borders(Borders::ALL).title("[ Full Scan ]"));
             f.render_widget(paragraph, right_chunks[1]);
-        } else if app.focus == crate::PanelFocus::Right && (app.file_entries.is_some() || app.full_scan_results.is_some()) {
-            // Show file operations help when files are displayed and right panel is focused
-            let help_text = "\n\n- Press 'd' to delete file\n- Press 'c' to copy file\n- Press 'm' to move file\n- Press 'S' for full scan and size sorting";
-            let paragraph = Paragraph::new(help_text)
-                .block(Block::default().borders(Borders::ALL).title("[ File Operations ]"));
-            f.render_widget(paragraph, right_chunks[1]);
+        } else if app.focus == crate::PanelFocus::Right {
+            if app.folder_summaries.is_some() && app.scan_mode == crate::ScanMode::JunkScan {
+                // Show junk scan help when folder summaries are displayed
+                let help_text = if app.folder_view_mode {
+                    "\n\n- Press 'Enter' to view files in this folder\n- Press 'Tab' to switch to file view\n- Press 'S' to rescan junk files"
+                } else {
+                    "\n\n- Press 'Tab' to switch to folder view\n- Press 'd' to delete file\n- Press 'S' to rescan junk files"
+                };
+                let title = if app.folder_view_mode {
+                    "[ Folder Operations ]"
+                } else {
+                    "[ File Operations ]"
+                };
+                let paragraph = Paragraph::new(help_text)
+                    .block(Block::default().borders(Borders::ALL).title(title));
+                f.render_widget(paragraph, right_chunks[1]);
+            } else if app.file_entries.is_some() || app.full_scan_results.is_some() {
+                // Show file operations help when files are displayed and right panel is focused
+                let help_text = "\n\n- Press 'd' to delete file\n- Press 'c' to copy file\n- Press 'm' to move file\n- Press 'S' for full scan and size sorting";
+                let paragraph = Paragraph::new(help_text)
+                    .block(Block::default().borders(Borders::ALL).title("[ File Operations ]"));
+                f.render_widget(paragraph, right_chunks[1]);
+            }
         }
         // No else condition - hide panel when not needed
 

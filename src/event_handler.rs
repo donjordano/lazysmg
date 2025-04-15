@@ -1,7 +1,7 @@
 use std::{error::Error, sync::mpsc, thread, time::Duration};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use crate::{App, AppMode, PanelFocus, ScanProgress, FileOperation};
-use crate::platform::macos;
+use crate::{App, AppMode, PanelFocus, ScanProgress, FileOperation, ScanMode};
+use crate::platform::{macos, junk_scanner};
 use crate::scanner::{scan_files, full_scan_with_progress, ScanProgressMessage};
 use crate::perform_file_operation;
 use tokio::sync::mpsc::Sender;
@@ -109,12 +109,39 @@ pub async fn process_event(
                                     *mode = AppMode::Scanning { device_index: app.selected, spinner_index: 0 };
                                 }
                             },
+                            KeyCode::Tab => {
+                                // Toggle folder view in junk scan mode
+                                if app.folder_summaries.is_some() && app.scan_mode == crate::ScanMode::JunkScan {
+                                    app.folder_view_mode = !app.folder_view_mode;
+                                    // Reset indices when switching views
+                                    if app.folder_view_mode {
+                                        app.selected_file_index = 0;
+                                    } else {
+                                        app.selected_folder_index = 0;
+                                    }
+                                    app.file_list_offset = 0;
+                                }
+                            },
+                            KeyCode::Enter => {
+                                // When in folder view, switch to file view showing files from selected folder
+                                if app.folder_view_mode && app.folder_summaries.is_some() {
+                                    app.folder_view_mode = false;
+                                    // TODO: Filter files to show only those from selected folder
+                                    app.selected_file_index = 0;
+                                    app.file_list_offset = 0;
+                                }
+                            },
                             KeyCode::Char('S') => {
                                 // Full device scan with progress tracking
                                 if !app.devices.is_empty() {
                                     let device = &app.devices[app.selected];
                                     let mount = device.mount_point.clone();
                                     let total_size = device.total_space;
+                                    let is_system_storage = !device.ejectable;
+
+                                    // Reset folder view mode
+                                    app.folder_view_mode = false;
+                                    app.selected_folder_index = 0;
 
                                     // Set up progress tracking
                                     app.scan_progress = ScanProgress {
@@ -128,12 +155,27 @@ pub async fn process_event(
                                     // Create a clone of the progress channel
                                     let progress_sender = progress_tx.clone();
 
-                                    // Spawn the full scan task
-                                    tokio::spawn(async move {
-                                        let _ = tokio::task::spawn_blocking(move || {
-                                            full_scan_with_progress(&mount, total_size, progress_sender)
-                                        }).await;
-                                    });
+                                    // Different scan types based on device type
+                                    if is_system_storage {
+                                        // For system storage, scan for junk files
+                                        app.scan_mode = ScanMode::JunkScan;
+                                        
+                                        // Spawn the junk scan task
+                                        let progress_clone = progress_sender.clone();
+                                        tokio::spawn(async move {
+                                            let _ = junk_scanner::scan_system_junk(progress_clone).await;
+                                        });
+                                    } else {
+                                        // For external/ejectable devices, do a full scan
+                                        app.scan_mode = ScanMode::FullScan;
+                                        
+                                        // Spawn the full scan task
+                                        tokio::spawn(async move {
+                                            let _ = tokio::task::spawn_blocking(move || {
+                                                full_scan_with_progress(&mount, total_size, progress_sender)
+                                            }).await;
+                                        });
+                                    }
 
                                     *mode = AppMode::FullScan {
                                         device_index: app.selected,
