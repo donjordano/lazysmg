@@ -483,8 +483,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
+    // Create a short delay to allow any in-progress tasks to complete gracefully
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    
+    // Close the channels explicitly to prevent "channel closed" errors
+    drop(scan_tx);
+    drop(progress_tx);
+    
+    // Clean up terminal state
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
+    
+    // Return success
     Ok(())
 }

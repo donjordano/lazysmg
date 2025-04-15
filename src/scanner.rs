@@ -155,8 +155,10 @@ pub fn full_scan_with_progress(
                     size,
                     path: file_path.clone()
                 };
-                if let Err(e) = tx.blocking_send(progress_msg) {
-                    eprintln!("Failed to send progress update: {}", e);
+                // If sending fails, the application has likely closed
+                if let Err(_) = tx.blocking_send(progress_msg) {
+                    // Return early to avoid more errors
+                    return Ok(());
                 }
                 
                 files.push(FileEntry {
@@ -181,9 +183,9 @@ pub fn full_scan_with_progress(
         results: files,
         files_processed 
     };
-    if let Err(e) = progress_tx.blocking_send(complete_msg) {
-        eprintln!("Failed to send scan completion message: {}", e);
-    }
+    
+    // Ignore errors - the app may have been closed
+    let _ = progress_tx.blocking_send(complete_msg);
     
     Ok(())
 }

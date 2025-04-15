@@ -189,8 +189,11 @@ pub async fn scan_system_junk(
                         path: path.to_string_lossy().into_owned(),
                     };
                     
-                    if let Err(e) = progress_tx.send(progress_msg).await {
-                        eprintln!("Failed to send progress update: {}", e);
+                    // Only log errors in debug mode
+                    if let Err(_) = progress_tx.send(progress_msg).await {
+                        // Channel closed, likely because the app is shutting down
+                        // Return early to avoid more errors
+                        return Ok(results);
                     }
                 }
             }
@@ -201,14 +204,16 @@ pub async fn scan_system_junk(
     results.sort_by_size();
     
     // Send completion message
-    let completion_msg = ScanProgressMessage::ScanComplete { 
+    let completion_msg = ScanProgressMessage::JunkScanComplete { 
         results: results.to_file_entries(),
         files_processed: results.total_files,
+        folder_summaries: results.folders.iter()
+            .map(|(path, summary)| (path.clone(), summary.total_size, summary.files.len()))
+            .collect(),
     };
     
-    if let Err(e) = progress_tx.send(completion_msg).await {
-        eprintln!("Failed to send scan completion message: {}", e);
-    }
+    // Ignore errors - the app may have been closed
+    let _ = progress_tx.send(completion_msg).await;
     
     Ok(results)
 }
