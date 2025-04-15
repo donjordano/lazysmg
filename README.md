@@ -20,6 +20,19 @@ The application features an interactive TUI built with [ratatui](https://crates.
   A detailed help overlay is available (triggered by the “?” key) to guide users with all available shortcuts and commands.
 
 ---
+## Screennshots
+- **Main Interface:**
+  ![Main Interface](screenshots/main-interface.png)
+
+- **Scan Progress:**
+  ![Scan Progress](screenshots/scan-progress.png)
+
+- **Help Overlay:**
+  ![Help Overlay](screenshots/help-overlay.png)
+
+- **Confirmation Overlay:**
+  ![Scan Progress](screenshots/confirm-overlay.png)
+---
 
 ## Project Structure
 
